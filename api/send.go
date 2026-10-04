@@ -2,10 +2,8 @@ package handler
 
 import (
 	"bytes"
-	"crypto/subtle"
 	"encoding/json"
 	"fmt"
-	"html"
 	"io"
 	"net/http"
 	"net/url"
@@ -32,8 +30,7 @@ type telegramRequest struct {
 }
 
 type telegramResponse struct {
-	OK          bool   `json:"ok"`
-	Description string `json:"description,omitempty"`
+	OK bool `json:"ok"`
 }
 
 func Handler(w http.ResponseWriter, r *http.Request) {
@@ -48,9 +45,7 @@ func Handler(w http.ResponseWriter, r *http.Request) {
 
 	botToken := strings.TrimSpace(os.Getenv("TELEGRAM_BOT_TOKEN"))
 	chatID := strings.TrimSpace(os.Getenv("TELEGRAM_CHAT_ID"))
-	relayKey := os.Getenv("RELAY_KEY")
-
-	if botToken == "" || chatID == "" || relayKey == "" {
+	if botToken == "" || chatID == "" {
 		http.Error(w, "server is not configured", http.StatusInternalServerError)
 		return
 	}
@@ -58,12 +53,6 @@ func Handler(w http.ResponseWriter, r *http.Request) {
 	r.Body = http.MaxBytesReader(w, r.Body, 32<<10)
 	if err := r.ParseForm(); err != nil {
 		http.Error(w, "invalid form", http.StatusBadRequest)
-		return
-	}
-
-	providedKey := r.FormValue("key")
-	if subtle.ConstantTimeCompare([]byte(providedKey), []byte(relayKey)) != 1 {
-		http.Error(w, "forbidden", http.StatusForbidden)
 		return
 	}
 
@@ -124,19 +113,14 @@ func Handler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var tg telegramResponse
-	_ = json.Unmarshal(body, &tg)
-	if resp.StatusCode < 200 || resp.StatusCode >= 300 || !tg.OK {
-		msg := "Telegram rejected the message"
-		if tg.Description != "" {
-			msg += ": " + tg.Description
-		}
-		http.Error(w, msg, http.StatusBadGateway)
+	if err := json.Unmarshal(body, &tg); err != nil || resp.StatusCode < 200 || resp.StatusCode >= 300 || !tg.OK {
+		http.Error(w, "Telegram rejected the message", http.StatusBadGateway)
 		return
 	}
 
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	w.WriteHeader(http.StatusOK)
-	_, _ = fmt.Fprintf(w, `<!doctype html>
+	_, _ = fmt.Fprint(w, `<!doctype html>
 <html lang="ru">
 <head>
 <meta charset="utf-8">
@@ -149,8 +133,8 @@ main{max-width:640px;border:1px solid #262b33;border-radius:20px;padding:28px;ba
 h1{margin-top:0}.ok{font-size:54px;margin:0 0 12px}p{color:#aab2bd;line-height:1.5}a{display:inline-block;margin-top:10px;color:#f5f7fa}
 </style>
 </head>
-<body><main><div class="ok">✅</div><h1>Сообщение отправлено</h1><p>Telegram Bot API принял сообщение для чата %s.</p><a href="/">Вернуться назад</a></main></body>
-</html>`, html.EscapeString(chatID))
+<body><main><div class="ok">✅</div><h1>Сообщение отправлено</h1><p>Telegram Bot API подтвердил доставку сообщения.</p><a href="/">Вернуться назад</a></main></body>
+</html>`)
 }
 
 func buildButtons(r *http.Request) ([][]inlineKeyboardButton, error) {

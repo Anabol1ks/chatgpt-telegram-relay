@@ -10,6 +10,7 @@ import (
 	"os"
 	"strings"
 	"time"
+	_ "time/tzdata"
 	"unicode/utf8"
 )
 
@@ -32,6 +33,14 @@ type telegramRequest struct {
 type telegramResponse struct {
 	OK bool `json:"ok"`
 }
+
+var moscowLocation = func() *time.Location {
+	location, err := time.LoadLocation("Europe/Moscow")
+	if err != nil {
+		panic(err)
+	}
+	return location
+}()
 
 func Handler(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Cache-Control", "no-store")
@@ -77,7 +86,7 @@ func Handler(w http.ResponseWriter, r *http.Request) {
 		replyMarkup = &inlineKeyboardMarkup{InlineKeyboard: rows}
 	}
 
-	text = fmt.Sprintf("%s\n\nОтправлено: %s UTC", text, time.Now().UTC().Format("2006-01-02 15:04:05"))
+	text = fmt.Sprintf("%s\n\nОтправлено: %s UTC", text, time.Now().In(moscowLocation).Format("2006-01-02 15:04:05 МСК"))
 
 	payload, err := json.Marshal(telegramRequest{
 		ChatID:                chatID,
